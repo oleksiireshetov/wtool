@@ -9,7 +9,7 @@ module WTool
 			net.each do |ip|
 				l = WTool::Util.get_ipaddr_list(ip)
 				l.each do |t|
-					puts t
+					puts WTool::Util.revise(t)
 				end
 			end
 		end
