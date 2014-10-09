@@ -1,8 +1,12 @@
 require 'ipaddr'
 require 'net/http'
+require "resolv"
+require "url"
+
 
 module WTool
 	class Util	
+		
 		def self.get_ipaddr_list(ip_entry)
 			if ip_entry.include? "/"
 				return IPAddr.new(ip_entry).to_range
@@ -20,25 +24,26 @@ module WTool
 			return [IPAddr.new(ip_entry)];
 		end
 
-		def self.revise(ip_addr)
-			result = []
-			if revise_by_type(ip_addr, :mcafee) == false
-				result.push :mcafee
-			end
-			if revise_by_type(ip_addr, :drweb) == false
-				result.push :drweb
-			end
-			return result
+		Struct.new("IPCheckResult", :ip, :url, :isClean, :type)
+		def self.revise(ip_addr)			
+			array = []
+			array.push revise_by_type(ip_addr, :mcafee);
+			array.push revise_by_type(ip_addr, :drweb)
+			array.push revise_by_type(ip_addr, :sbl)
+			return array
 		end
 
+		
 		def self.revise_by_type(ip_addr, type)
+			url = ""
+			isClean = true
 			case type
 				when :mcafee
 					url = "http://www.siteadvisor.com/sites/#{ip_addr}"
 					uri = URI(url)
 					res = Net::HTTP.get_response(uri)
 					if res.body.include? "This link might be dangerous"
-						return false
+						isClean = false
 					end
 				when :drweb
 					url = "http://online.us.drweb.com/result"
@@ -50,11 +55,28 @@ module WTool
 							error = true
 					end
 					if error === false and res.body.include? "is in Dr.Web malicious sites list"							
-						return false
+						isClean = false
+					end	
+				when :sbl
+					host = ip_addr.to_s.split(".").reverse.join(".")
+					url = "#{host}.sbl-xbl.spamhaus.org"
+					answer = dns_resolv(url)
+					if (answer == '127.0.0.2')
+						isClean = false
 					end
-					
 			end
-			return true	
+			return Struct::IPCheckResult.new(ip_addr.to_s, url, isClean, type)
 		end
+
+		def self.dns_resolv(name)
+        begin
+          dns = Resolv::DNS.new
+          result = dns.getresources(name, Resolv::DNS::Resource::IN::A)
+          return (result.size > 0 ? result.first.address.to_s : nil)
+        rescue Resolv::ResolvError => e
+          return :error
+        end
+
+      end
 	end
 end	
